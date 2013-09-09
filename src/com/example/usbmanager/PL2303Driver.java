@@ -1,6 +1,5 @@
 package com.example.usbmanager;
 
-import android.annotation.SuppressLint;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -91,8 +90,8 @@ public class PL2303Driver
   private int mReadbufRemain;
   byte[] mReadbuf = new byte[4096];
 
-  private int RdTransferTimeOut = 5000;
-  private int WrCTRLTransferTimeOut = 100;
+  private int RdTransferTimeOut = 10;
+  private int WrCTRLTransferTimeOut = 10;
   private ArrayBlockingQueue<Integer> iReadQueueArray = new ArrayBlockingQueue(4096, true);
   public static Object ReadQueueLock = new Object();
   private ReadDataThread mThread;
@@ -102,7 +101,7 @@ public class PL2303Driver
   private boolean updateReadCount = false;
 
   private boolean isRS485Mode = false;
-  private String ACTION_USB_PERMISSION;
+  private final String ACTION_USB_PERMISSION;
   private int MAX_SUPPORT_DEVICE_COUNT = 4;
 
   private ArrayList<String> Supported_VID_PID = new ArrayList();
@@ -181,34 +180,12 @@ public class PL2303Driver
     this.mContext = mContext;
     this.bIsDisconnectShow = true;
     this.ACTION_USB_PERMISSION = sAppName;
-    
-    mReadPakcetChecker = false;
-    mPortSetting = new byte[7];
-    mFlowCtrl = FlowControl.OFF;
-    mControlLines = 0;
-    mStatusLines = 0;
-    mPL2303Type = 0;
-    mReadbuf = new byte[4096];
-    RdTransferTimeOut = 5000;
-    WrCTRLTransferTimeOut = 100;
-    iReadQueueArray = new ArrayBlockingQueue(4096, true);
-    incReadCount = 0;
-    totalReadCount = 0;
-    updateReadCount = false;
-    isRS485Mode = false;
-    MAX_SUPPORT_DEVICE_COUNT = 4;
-    Supported_VID_PID = new ArrayList();
-       
-    
     this.Supported_VID_PID.add("067B:2303");
     this.Supported_VID_PID.add("067B:2551");
     this.Supported_VID_PID.add("067B:AAA5");
     this.Supported_VID_PID.add("0557:2008");
     this.Supported_VID_PID.add("05AD:0FBA");
     this.iSupportedDevListCnt = this.Supported_VID_PID.size();
-    UsbDevice dev = PL2303Driver.sDevice;
-    setUsbInterfaces(dev);
-    bHasPermission = true;
   }
 
   private void setUsbInterfaces(UsbDevice device)
@@ -295,7 +272,6 @@ public class PL2303Driver
     return true;
   }
 
- 
   public boolean enumerate()
   {
       Log.i("PL2303HXDDriver", "enumerating");
@@ -336,8 +312,6 @@ public class PL2303Driver
       Log.i("PL2303HXDDriver", "no more devices found");
       return false;
   }
-
-  
   
   private void getInformation(UsbDevice d)
   {
@@ -363,10 +337,10 @@ public class PL2303Driver
       return false;
     }
 
-    if (this.mPL2303Type != 4) {
-      Log.d("PL2303HXDDriver", "No PL2303HXD chip");
-      return false;
-    }
+//    if (this.mPL2303Type != 4) {
+//      Log.d("PL2303HXDDriver", "No PL2303HXD chip");
+//      return false;
+//    }
 
     this.mThread = new ReadDataThread();
 
@@ -390,12 +364,7 @@ public class PL2303Driver
       return false;
     }
     int res = 0;
-    try {
-      res = setup(R, DataBits.D8, StopBits.S1, Parity.NONE, FlowControl.OFF);
-    }
-    catch (IOException e) {
-      e.printStackTrace();
-    }
+    res = setup(R, DataBits.D8, StopBits.S1, Parity.NONE, FlowControl.OFF);
     if (res < 0) {
       Log.d("PL2303HXDDriver", "fail to InitByBaudRate" + R + "res:" + res);
       return false;
@@ -412,12 +381,7 @@ public class PL2303Driver
       return false;
     }
     int res = 0;
-    try {
-      res = setup(R, D, S, P, F);
-    }
-    catch (IOException e) {
-      e.printStackTrace();
-    }
+    res = setup(R, D, S, P, F);
     if (res < 0) {
       Log.d("PL2303HXDDriver", "fail to InitByPortSetting");
       return false;
@@ -441,7 +405,10 @@ public class PL2303Driver
 
   public boolean isConnected()
   {
-	  return mDevice != null && mPLEndpointBulkIN != null && mPLEndpointBulkOUT != null;
+    if ((this.mDevice != null) && (this.mPLEndpointBulkIN != null) && (this.mPLEndpointBulkOUT != null)) {
+      return true;
+    }
+    return false;
   }
 
   private boolean getPLEndpoints(UsbInterface usbIf)
@@ -596,7 +563,7 @@ public class PL2303Driver
       return ret;
   }
 
-  
+
   private int ReadFromHW(byte[] buf, int rlength)
   {
     if ((buf.length == 0) || (rlength == 0)) {
@@ -727,225 +694,139 @@ public class PL2303Driver
   }
 
   public int setup(BaudRate R, DataBits D, StopBits S, Parity P, FlowControl F)
-    throws IOException
   {
     int res = 0;
-    if (this.mDeviceConnection == null) {
-      Log.d("PL2303HXDDriver", "Connection closed");
-      return -1;
-    }
 
-    res = this.mDeviceConnection.controlTransfer(161, 33, 0, 0, this.mPortSetting, 7, this.WrCTRLTransferTimeOut);
-    if (res < 0) {
-      Log.d("PL2303HXDDriver", "fail to setup:get line request");
-      return res;
-    }
+	  res = this.mDeviceConnection.controlTransfer(161, 33, 0, 0, this.mPortSetting, 7, this.WrCTRLTransferTimeOut);
+	    if (res < 0) {
+	      Log.d("PL2303HXDDriver", "fail to setup:get line request");
+	      return res;
+	    }
+	    
+	    
+	    int baud = 0;
+	    switch (R) {
+	    case B0:
+	      baud = 0; break;
+	    case B115200:
+	      baud = 115200; break;
+	    case B1200:
+	      baud = 1200; break;
+	    case B1228800:
+	      baud = 1228800; break;
+	    case B14400:
+	      baud = 14400; break;
+	    case B150:
+	      baud = 150; break;
+	    case B1800:
+	      baud = 1800; break;
+	    case B19200:
+	      baud = 19200; break;
+	    case B230400:
+	      baud = 230400; break;
+	    case B2400:
+	      baud = 2400; break;
+	    case B2457600:
+	      baud = 2457600; break;
+	    case B300:
+	      baud = 300; break;
+	    case B3000000:
+	      baud = 3000000; break;
+	    case B38400:
+	      baud = 38400; break;
+	    case B460800:
+	      baud = 460800; break;
+	    case B4800:
+	      baud = 4800; break;
+	    case B57600:
+	      baud = 57600; break;
+	    case B600:
+	      baud = 600; break;
+	    case B6000000:
+	      baud = 6000000; break;
+	    case B614400:
+	      baud = 614400; break;
+	    case B75:
+	      baud = 75; break;
+	    case B921600:
+	      baud = 921600; break;
+	    case B9600:
+	      baud = 9600; break;
+	    default:
+	      Log.d("PL2303HXDDriver", "Baudrate not supported");
+	      return -2;
+	    }
+	    
+	    Log.d("PL2303HXDDriver", "setup:" + baud);
 
-    Log.d("PL2303HXDDriver", "Current serial configuration:" + this.mPortSetting[0] + "," + this.mPortSetting[1] + "," + this.mPortSetting[2] + "," + this.mPortSetting[3] + "," + this.mPortSetting[4] + "," + this.mPortSetting[5] + "," + this.mPortSetting[6]);
+	    this.mPortSetting[0] = ((byte)(baud & 0xFF));
+	    this.mPortSetting[1] = ((byte)(baud >> 8 & 0xFF));
+	    this.mPortSetting[2] = ((byte)(baud >> 16 & 0xFF));
+	    this.mPortSetting[3] = ((byte)(baud >> 24 & 0xFF));
 
-    int baud = 0;
-    switch (R) { case B0:
-      baud = 0; break;
-    case B115200:
-      baud = 75; break;
-    case B1200:
-      baud = 150; break;
-    case B1228800:
-      baud = 300; break;
-    case B14400:
-      baud = 600; break;
-    case B150:
-      baud = 1200; break;
-    case B1800:
-      baud = 1800; break;
-    case B19200:
-      baud = 2400; break;
-    case B230400:
-      baud = 4800; break;
-    case B2400:
-      baud = 9600; break;
-    case B2457600:
-      baud = 14400; break;
-    case B300:
-      baud = 19200; break;
-    case B3000000:
-      baud = 38400; break;
-    case B38400:
-      baud = 57600; break;
-    case B460800:
-      baud = 115200; break;
-    case B4800:
-      baud = 230400; break;
-    case B57600:
-      baud = 460800; break;
-    case B600:
-      baud = 614400; break;
-    case B6000000:
-      baud = 921600; break;
-    case B614400:
-      baud = 1228800; break;
-    case B75:
-      baud = 2457600; break;
-    case B921600:
-      baud = 3000000; break;
-    case B9600:
-      baud = 6000000; break;
-    default:
-      Log.d("PL2303HXDDriver", "Baudrate not supported");
-      return -2;
-    }
+	    switch (S) { 
+	    case S1:
+	      this.mPortSetting[4] = 0; break;
+	    case S2:
+	      this.mPortSetting[4] = 1; break;
+	    default:
+	      Log.d("PL2303HXDDriver", "Stopbit setting not supported");
+	      return -3;
+	    }
 
-    if ((baud > 1228800) && (this.mPL2303Type == 0))
-    {
-      Log.d("PL2303HXDDriver", "Baudrate not supported: Only PL2303HX supports the higher baudrates");
-      return -2;
-    }
+	    switch (P) { 
+	    case NONE:
+	      this.mPortSetting[5] = 0; break;
+	    case ODD:
+	      this.mPortSetting[5] = 1; break;
+	    case EVEN:
+	      this.mPortSetting[5] = 2; break;
+	    default:
+	      Log.d("PL2303HXDDriver", "Parity setting not supported");
+	      return -4;
+	    }
 
-    if (this.mThread != null) {
-      SetThreadDelayTime(R);
-      Log.d("PL2303HXDDriver", "SetThreadDelayTime:" + baud);
-    }
+	    switch (D) { 
+	    case D5:
+	      this.mPortSetting[6] = 5; break;
+	    case D6:
+	      this.mPortSetting[6] = 6; break;
+	    case D7:
+	      this.mPortSetting[6] = 7; break;
+	    case D8:
+	      this.mPortSetting[6] = 8; break;
+	    default:
+	      Log.d("PL2303HXDDriver", "Databit setting not supported");
+	      return -5;
+	    }
 
-    Log.d("PL2303HXDDriver", "setup:" + baud);
-
-    this.mPortSetting[0] = ((byte)(baud & 0xFF));
-    this.mPortSetting[1] = ((byte)(baud >> 8 & 0xFF));
-    this.mPortSetting[2] = ((byte)(baud >> 16 & 0xFF));
-    this.mPortSetting[3] = ((byte)(baud >> 24 & 0xFF));
-
-    switch (S) { case S1:
-      this.mPortSetting[4] = 0; break;
-    case S2:
-      this.mPortSetting[4] = 2; break;
-    default:
-      Log.d("PL2303HXDDriver", "Stopbit setting not supported");
-      return -3;
-    }
-
-    switch (P) { case EVEN:
-      this.mPortSetting[5] = 0; break;
-    case NONE:
-      this.mPortSetting[5] = 1; break;
-    case ODD:
-      this.mPortSetting[5] = 2; break;
-    default:
-      Log.d("PL2303HXDDriver", "Parity setting not supported");
-      return -4;
-    }
-
-    switch (D) { case D5:
-      this.mPortSetting[6] = 5; break;
-    case D6:
-      this.mPortSetting[6] = 6; break;
-    case D7:
-      this.mPortSetting[6] = 7; break;
-    case D8:
-      this.mPortSetting[6] = 8; break;
-    default:
-      Log.d("PL2303HXDDriver", "Databit setting not supported");
-      return -5;
-    }
-
-    res = this.mDeviceConnection.controlTransfer(33, 32, 0, 0, this.mPortSetting, 7, this.WrCTRLTransferTimeOut);
-    if (res < 0) {
-      Log.e("PL2303HXDDriver", "Error in setting serial configuration");
-      return res;
-    }
-    Log.d("PL2303HXDDriver", "New serial configuration:" + this.mPortSetting[0] + "," + this.mPortSetting[1] + "," + this.mPortSetting[2] + "," + this.mPortSetting[3] + "," + this.mPortSetting[4] + "," + this.mPortSetting[5] + "," + this.mPortSetting[6]);
-
-    res = this.mDeviceConnection.controlTransfer(33, 35, 0, 0, null, 0, this.WrCTRLTransferTimeOut);
-    if (res < 0) {
-      Log.d("PL2303HXDDriver", "fail to setup:break off");
-      return res;
-    }
-
-    switch (F) {
-    case DTRDSR:
-      res = this.mDeviceConnection.controlTransfer(64, 1, 0, 0, null, 0, this.WrCTRLTransferTimeOut);
-      if (res < 0) {
-        Log.d("PL2303HXDDriver", "fail to setup:write request");
-        return res;
-      }
-
-      this.mFlowCtrl = F;
-      Log.d("PL2303HXDDriver", "FlowControl disabled");
-
-      break;
-    case OFF:
-      res = this.mDeviceConnection.controlTransfer(64, 1, 0, 65, null, 0, this.WrCTRLTransferTimeOut);
-      if (res < 0) {
-        Log.d("PL2303HXDDriver", "fail to setup");
-        return res;
-      }
-
-      this.mFlowCtrl = F;
-      Log.d("PL2303HXDDriver", "RTS/CTS FlowControl enabled");
-      break;
-    case RFRCTS:
-      break;
-    case RTSCTS:
-      if (4 == this.mPL2303Type) {
-        res = this.mDeviceConnection.controlTransfer(64, 1, 0, 8, null, 0, this.WrCTRLTransferTimeOut);
-        if (res < 0) {
-          Log.d("PL2303HXDDriver", "fail to setup");
-          return res;
-        }
-        this.mFlowCtrl = F;
-      }
-
-      break;
-    case XONXOFF:
-      res = this.mDeviceConnection.controlTransfer(64, 1, 0, 192, null, 0, this.WrCTRLTransferTimeOut);
-      if (res < 0) {
-        Log.d("PL2303HXDDriver", "fail to setup");
-        return res;
-      }
-      this.mFlowCtrl = F;
-
-      break;
-    default:
-      Log.d("PL2303HXDDriver", "failed to FlowControl ");
-      return -6;
-    }
-
-    if (this.isRS485Mode) {
-      Log.d("PL2303HXDDriver", "RS485 Mode detected");
-
-      res = this.mDeviceConnection.controlTransfer(64, 1, 0, 49, null, 0, this.WrCTRLTransferTimeOut);
-      if (res < 0) {
-        Log.d("PL2303HXDDriver", "fail to Set RS485 CommandA");
-        return res;
-      }
-      res = this.mDeviceConnection.controlTransfer(64, 1, 1, 8, null, 0, this.WrCTRLTransferTimeOut);
-      if (res < 0) {
-        Log.d("PL2303HXDDriver", "fail to Set RS485 CommandB");
-        return res;
-      }
-
-    }
-
-    return 0;
+	    res = this.mDeviceConnection.controlTransfer(33, 32, 0, 0, this.mPortSetting, 7, this.WrCTRLTransferTimeOut);
+	    if (res < 0) {
+	      Log.e("PL2303HXDDriver", "Error in setting serial configuration");
+	      return res;
+	    }   
+	    
+	return 0;
   }
 
-  @SuppressLint("NewApi")
-private int initPL2303Chip(UsbDeviceConnection conn)
+  private int initPL2303Chip(UsbDeviceConnection conn)
   {
     int res = 0;
     this.isRS485Mode = false;
-    if (this.bIsPL2551BTYPE) {
-      this.mPL2303Type = 4;
-    }
-    else {
-      if (conn.getRawDescriptors()[13] == 4) this.mPL2303Type = 4;
-
-      if ((res = checkPL2303ChipType(conn)) < 0) {
-        return res;
-      }
-      if ((res = checkRS485Mode(conn)) < 0) {
-        return res;
-      }
-    }
-    if (this.mPL2303Type != 4) return -1;
+//    if (this.bIsPL2551BTYPE) {
+//      this.mPL2303Type = 4;
+//    }
+//    else {
+//      if (conn.getRawDescriptors()[13] == 4) this.mPL2303Type = 4;
+//
+//      if ((res = checkPL2303ChipType(conn)) < 0) {
+//        return res;
+//      }
+//      if ((res = checkRS485Mode(conn)) < 0) {
+//        return res;
+//      }
+//    }
+//    if (this.mPL2303Type != 4) return -1;
 
     byte[] buffer = new byte[1];
 
@@ -1023,13 +904,10 @@ private int initPL2303Chip(UsbDeviceConnection conn)
       Log.d("PL2303HXDDriver", "fail to initPL2303Chip");
       return res;
     }
-    try
-    {
+
       res = setup(BaudRate.B9600, DataBits.D8, StopBits.S1, Parity.NONE, FlowControl.OFF);
-    }
-    catch (IOException e) {
-      e.printStackTrace();
-    }
+
+
     if (res < 0) {
       Log.d("PL2303HXDDriver", "fail to initPL2303Chip: setup");
       return res;
@@ -1142,12 +1020,18 @@ private int initPL2303Chip(UsbDeviceConnection conn)
     private int iQueueCount;
     private boolean ret = true; private boolean bStop = false;
 
-    private AtomicInteger iDelayTimeMS = new AtomicInteger(500);
+    private AtomicInteger iDelayTimeMS = new AtomicInteger(20);
 
-    ReadDataThread() {  } 
-    public void ReadDataThead() { this.iQueueCount = 0;
+    ReadDataThread() 
+    {  
+    	
+    } 
+    public void ReadDataThead()
+    { 
+    	this.iQueueCount = 0;
       this.iReadCnt = 0;
-      PL2303Driver.this.iReadQueueArray.clear(); }
+      PL2303Driver.this.iReadQueueArray.clear();
+      }
 
     public void ReadDataThead(int mTimeMS)
     {
@@ -1185,15 +1069,19 @@ private int initPL2303Chip(UsbDeviceConnection conn)
         byte[] rbuf = new byte[4096];
 
         while (!this.bStop) {
-          this.iReadCnt = PL2303Driver.this.ReadFromHW(rbuf, rbuf.length);
+          this.iReadCnt = PL2303Driver.this.ReadFromHW(rbuf, rbuf.length);        
           if (this.iReadCnt > 0)
-          {
+          {   
+        	  PL2303Driver.this.write(rbuf,iReadCnt);   
             synchronized (PL2303Driver.ReadQueueLock) {
               this.iQueueCount = PL2303Driver.this.iReadQueueArray.size();
 
               if (4096 == this.iQueueCount) {
                 Log.i("PL2303HXDDriver", "Queue is full");
-              } else {
+              } 
+              else 
+              {
+            	  
                 int i = 0;
                 do
                 {
@@ -1204,13 +1092,19 @@ private int initPL2303Chip(UsbDeviceConnection conn)
                   }
                   this.iQueueCount = PL2303Driver.this.iReadQueueArray.size();
 
-                  i++; if (i >= this.iReadCnt) break;  } while (this.iQueueCount < 4096);
+                  i++; 
+                  if (i >= this.iReadCnt) 
+                	  break; 
+                 } while (this.iQueueCount < 4096);            
               }
-
-            }
-
+            }  
+          
           }
-
+//          int len;
+//          byte[] rbuf1 = new byte[4096];
+//          len = PL2303Driver.this.read(rbuf1);
+//          if (len>0)
+//        	  PL2303Driver.this.write(rbuf1,len); 
           int time = this.iDelayTimeMS.get();
           DelayTime(time);
         }
